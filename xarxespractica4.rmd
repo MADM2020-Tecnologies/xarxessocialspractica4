@@ -40,6 +40,68 @@ I <- 0
 ```
 
 
+```{r exemple jario sobre SI}
+A=matrix(c(0,1,0,1,1,0,0,1,0,0,0,1,1,1,1,0),4)
+E=eigen(A)
+E$vectors
+E$values
+A %*% (E$vectors[,1])
+E$values[1]*(E$vectors[,1])
+
+t=0.1
+beta=0.1
+x0=c(0,0,1,0)
+I = c(1,1,1,1)
+
+newX <- function (t, beta) {   # algebraic and analytical (approx)
+  a0= x0 %*% E$vectors
+ 
+  e=exp(E$values*beta*t)
+
+  coef=a0*e
+
+  R= E$vectors %*% t(coef)
+  return(R)
+}
+
+
+
+newx <- function (x,beta) {   #Iterative
+  s = I - x
+  return ( x + beta * s * (A %*% x) )
+}
+
+
+n=4
+nIter=25
+RX=matrix(0,nrow=n,ncol=nIter)
+RX[,1]=x0
+for (i in 2:(nIter) ){
+ RX[,i] = newx(RX[,i-1],beta)
+}
+
+x =x0
+x=newx(x,beta,0)
+x
+
+plot(RX[3,],ylim=c(0.0 , 1.0),col="blue")
+par(new=TRUE)
+plot(RX[1,],ylim=c(0.0 , 1.0),col="green")
+par(new=TRUE)
+plot(RX[4,],ylim=c(0.0 , 1.0),col="red")
+
+
+
+
+
+
+library(igraph)
+
+G=sample_pa(100,directed=FALSE)
+
+plot(G)
+```
+
 
 
 

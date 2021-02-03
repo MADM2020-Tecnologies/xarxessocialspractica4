@@ -14,7 +14,24 @@ library(igraph)
 
 **1)** Generate an undirected random graph using the model of "preferential attachment" (sample_pa( )) of 1000 nodes. With $\beta=0.1$, $\gamma=0.1$, generate a SIR pandemic (iterative method). The initial infected nodes should be the 10 highest using the eigen_centrality( ). Compare the results to when the initial nodes are at random. Reduce or increase $\beta$ and compare. 
 
+```{r crear grafo aleatorio}
+set.seed(1)
+G= sample_pa(1000, directed=FALSE)
 
+A = as_adjacency_matrix(G)
+E = eigen(A)
+
+```
+
+```{r function}
+t = 0.1
+beta = 0.1
+gamma = 0.1
+x0 = 
+I = 
+
+
+```
 
 
 

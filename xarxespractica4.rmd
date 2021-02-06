@@ -12,7 +12,7 @@ knitr::opts_chunk$set(fig.width=8, fig.height=8, fig.align="center", echo=TRUE, 
 library(knitr)
 library(tidyverse)
 library(igraph)
-library(deSolve)
+require(deSolve)
 ```
 
 
@@ -28,60 +28,113 @@ randomGraph <- sample_pa(1000, directed=FALSE)
 eigenValues <- as_adjacency_matrix(randomGraph) %>% eigen()
 
 ```
+## SIR fora graf
 
 ```{r function}
-t <- 0.1
-beta <- 0.1
-gamma <- 0.1
-x0 <- 0
-I <- 0
+sir_1 <- function(beta, gamma, S0, I0, R0, times) {
+  # the differential equations:
+  sir_equations <- function(time, variables, parameters) {
+    with(as.list(c(variables, parameters)), {
+      dS <- -beta * infected * S
+      dI <-  beta * infected * S - gamma * infected
+      dR <-  gamma * infected
+      return(list(c(dS, dI, dR)))
+    })
+  }
 
+  # the parameters values:
+  parameters_values <- c(beta = beta, gamma = gamma)
 
+  # the initial values of variables:
+  initial_values <- c(S = S0, I = I0, R = R0)
+
+  # solving
+  out <- ode(initial_values, times, sir_equations, parameters_values)
+
+  # returning the output:
+  as.data.frame(out)
+}
+
+printSirValues <- function (sirValues, title = "") {
+  with(sirValues, {
+    print(paste0("S=", S))
+    print(paste0("I=", I))
+    print(paste0("R=", R))
+    # plotting the time series of susceptibles:
+    plot(time, S, type = "l", col = "blue",
+         xlab = "time (days)", ylab = "number of people",
+         main = title
+    )
+    # adding the time series of infectious:
+    lines(time, I, col = "red")
+    # adding the time series of recovered:
+    lines(time, R, col = "green")
+  })
+
+  # adding a legend:
+  legend("right", c("susceptibles", "infectious", "recovered"),
+         col = c("blue", "red", "green"), lty = 1, bty = "n")
+}
+
+tryBetas <- function (betaVector, gamma, S0, I0, R0, times) {
+  for(beta in betaVector) {
+    sir_1(beta = beta, gamma = gamma, S0 = S0, I0 = I0, R0 = R0, times = times) %>%
+            printSirValues(paste0("Beta = ", beta))
+  }
+}
 ```
+
+```{r}
+population <- 1000
+infected <- 10
+res2 <- sir_1(beta = 0.1, gamma = 0.1, S0 = 999, I0 = 1, R0 = 0, times = seq(0, 100))
+printSirValues(res2)
+tryBetas(beta = seq(0.0011, 0.0091, by = 0.001), gamma = 0.1, S0 = population - infected, I0 = infected, R0 = 0, times = seq(0, 100))
+```
+
+# amb graf
 
 
 ```{r exemple jario sobre SI}
-A=matrix(c(0,1,0,1,1,0,0,1,0,0,0,1,1,1,1,0),4)
-E=eigen(A)
-E$vectors
-E$values
-A %*% (E$vectors[,1])
-E$values[1]*(E$vectors[,1])
+A <- matrix(c(0, 1, 0, 1,
+              1, 0, 0, 1,
+              0, 0, 0, 1,
+              1, 1, 1, 0), 4) # adjacency matrix
 
-t=0.1
-beta=0.1
-x0=c(0,0,1,0)
-I = c(1,1,1,1)
+igraph_object <- igraph::graph.adjacency(A)
+plot(igraph_object)
 
-newX <- function (t, beta) {   # algebraic and analytical (approx)
-  a0= x0 %*% E$vectors
- 
-  e=exp(E$values*beta*t)
+recovery_rate <- 0.1 # rho / recovery rate
+infection_rate <- 0.1 # beta / infection rate
+susceptable0 <- c(0, 0, 1, 0) # susceptable
+infected <- c(1, 1, 1, 1) # infected
 
-  coef=a0*e
 
-  R= E$vectors %*% t(coef)
+calculate_infected <- function (adjacency_matrix, susceptable, beta, t) {   # algebraic and analytical (approx)
+  E <- eigen(adjacency_matrix)
+  a <- susceptable %*% E$vectors
+  e <- exp(E$values*beta*t)
+  coef <- a*e
+  R <- E$vectors %*% t(coef)
   return(R)
 }
 
-
-
-newx <- function (x,beta) {   #Iterative
-  s = I - x
-  return ( x + beta * s * (A %*% x) )
+calculate_recovered <- function (x, infected, beta) {   #Iterative
+  recovered <- infected - x
+  return ( x + beta * recovered * (A %*% x) )
 }
 
 
 n=4
 nIter=25
 RX=matrix(0,nrow=n,ncol=nIter)
-RX[,1]=x0
+RX[,1]=susceptable0
 for (i in 2:(nIter) ){
- RX[,i] = newx(RX[,i-1],beta)
+ RX[,i] = calculate_recovered(RX[, i-1], infection_rate)
 }
 
-x =x0
-x=newx(x,beta,0)
+x =susceptable0
+x=calculate_recovered(x, infection_rate)
 x
 
 plot(RX[3,],ylim=c(0.0 , 1.0),col="blue")
@@ -100,10 +153,149 @@ library(igraph)
 G=sample_pa(100,directed=FALSE)
 
 plot(G)
+
+```
+
+vertex -> llista 1, 2, 3, 4
+
+trobar succetibles --> neighbors de vertex
+
+infected -> llista true, f, f, f --> eigen
+susceptibles -> llista f, f, t, t
+recovered -> llista f, t, f, f
+
+
+vertex -> {
+id : numero de vertex
+state : infected, recovered, susceptible
+t_infected : quin t esta infectat
+t_recover : a quin t s'ha de recuperar -> 1/rho + t_infected
+}
+
+
+states -> infected, recovered, susceptible
+
+susceptible -> infected # P = beta >= random_value in range 0..1
+infected -> recovered # 1/rho * (t - t_infected)
+
+```{r}
+states <- c("susceptible", "infected", "recovered", "unknown")
+add_states <- function (graph, susceptible, infected, rho) {
+  if (!is.null(susceptible)) {
+    V(graph)[susceptible]$state <- states[1]
+    V(graph)[susceptible]$t_recover <- 0
+  }
+  if (!is.null(infected)) {
+    V(graph)[infected]$state <- states[2]
+    V(graph)[infected]$t_recover <- 1/rho
+  }
+  V(graph)[is.na(V(graph)$state)]$state <- states[4]
+  return(graph)
+}
+
+do_if_susceptible <- function (graph, idx, beta, rho, tick) {
+  vertex_neighbors <- neighbors(graph = graph, idx)
+  for(i in as.numeric(vertex_neighbors)) {
+    if (beta > runif(1, 0, 1)[1]) {
+      V(graph)$state[i] <- states[2]
+      V(graph)$t_recover[i] <- 1/rho + tick # tick is going to recover
+    }
+  }
+  return(graph)
+}
+
+change_state_infected <- function (graph, beta, rho, tick) {
+  for(i in 1:length(V(graph))) {
+    if (V(graph)$state[i] == states[1]) {
+      graph <- do_if_susceptible(graph, i, beta, rho, tick)
+    } else if(V(graph)$state[i] == states[2] && V(graph)$t_recover[i] >= tick){
+      V(graph)$state[i] <- states[3]
+    } # else: do nothing
+  }
+  return(graph)
+}
+
+buildSummary <- function (graph, tick) {
+  return(data.frame(
+          time = tick,
+          S = as.numeric(length(V(graph)[V(graph)$state == states[1]])),
+          I = as.numeric(length(V(graph)[V(graph)$state == states[2]])),
+          R = as.numeric(length(V(graph)[V(graph)$state == states[3]]))
+  ))
+}
+
+plot_state <- function (graph, state) {
+  my_color <- state
+  plot(graph, vertex.color=my_color)
+  return(null)
+}
+
+sir_2 <- function (graph, susceptible, infected, beta, rho, time, per_tick_plot = F) {
+  graph <- add_states(graph, susceptible, infected, rho)
+  per_tick_summary <- buildSummary(graph, 0)
+  for(tick in 1:time) {
+    graph <- change_state_infected(graph, beta, rho, tick)
+    per_tick_summary <- rbind(per_tick_summary, buildSummary(graph, tick))
+    if (per_tick_plot){
+      plot_state(graph, state)
+    }
+  }
+  return(per_tick_summary)
+}
+
+print_sir_values_2 <- function (sirValues, title = "") {
+  with(sirValues, {
+    ggplot(data = sirValues, aes(x = time)) +
+            ggtitle(title) +
+            ylab("Nodes") +
+            xlab("Time") +
+            geom_line(aes(y = S), color = "blue") +
+            geom_line(aes(y = I), color = "red") +
+            geom_line(aes(y = R), color = "green") +
+            scale_color_discrete(name = "State", labels = c("susceptible", "Infected", "Recovered"))
+  })
+}
+
+plot_different_beta <- function (graph, susceptible, infected, betaVector, rho, time) {
+  for(beta in betaVector) {
+    sir_2(graph, susceptible, infected, beta, rho, time) %>%
+            print_sir_values_2(paste0("Beta = ", beta))
+  }
+}
 ```
 
 
+```{r}
+# generate the 10 most central vertex as
+sample_size <- 1000
+beta <- 0.01
+rho <- 0.01
 
+set.seed(1234)
+my_graph <- sample_pa(sample_size, directed = F)
+eigen_values <- data.frame(id = 1: sample_size, values = eigen_centrality(my_graph)$vector)
+initially_infected <- ((eigen_values[order(eigen_values$values, decreasing = T),])[1:10,])$id
+susceptible <- V(my_graph)[-initially_infected]
+
+result <- sir_2(graph = my_graph,
+                susceptible = susceptible,
+                infected = initially_infected,
+                beta = beta,
+                rho = rho,
+                time = 100)
+print_sir_values_2(result, "test")
+```
+
+
+```{r}
+# vamos a probar valores desde 0.001 hasta 0.1 de 0.01
+plot_different_beta(graph = my_graph,
+                susceptible = susceptible,
+                infected = initially_infected,
+                beta = seq(0.001, 0.1, by = 0.01),
+                rho = rho,
+                time = 100)
+```
 
 
 **2)** Consider the random graph generated in the previous exercise.

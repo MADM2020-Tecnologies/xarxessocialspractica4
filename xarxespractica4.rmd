@@ -19,7 +19,7 @@ library(igraph)
 
 ### Creamos las funciones
 
-```{r}
+```{r sir_functions}
 states <- c("susceptible", "infected", "recovered", "unknown")
 add_states <- function (graph, susceptible, infected, rho) {
   if (!is.null(susceptible)) {
@@ -108,7 +108,7 @@ print_sir_values_2 <- function (sirValues, title = "") {
 
 #### Probamos que funciona
 
-```{r}
+```{r sir_test}
 sample_size <- 1000
 infected_0 <- 10
 
@@ -135,7 +135,7 @@ sir_2(graph = test_data$graph,
 
 #### Comparamos para diferentes betas
 
-```{r}
+```{r sir_beta_compare}
 graph_data <- prepare_data(size = sample_size, infected_0 = infected_0)
 for (beta in c(0.01, 0.1, 0.3, 0.5))
 {
@@ -143,7 +143,7 @@ for (beta in c(0.01, 0.1, 0.3, 0.5))
         susceptible = graph_data$susceptible,
         infected = graph_data$infected,
         beta = beta,
-        rho = rho0,
+        rho = 0.1,
         time = 50) %>%
     print_sir_values_2(paste0("Beta = ", beta)) %>% print()
 }
@@ -168,10 +168,20 @@ Para $\beta = 0.5$ vemos que la población se contagia muy rápido y se llega a 
 ### a) Plot its degrees distribution in linear and in log-log scale. Which is more helpful to understand this distribution?
 
 
-```{r}
+```{r 2_a powerlaw_plot_function}
 library(poweRlaw)
 plot_degrees_distribution <- function(degree) {
   unique_degree <- unique(degree)
+
+  m_pl <- displ$new(degree)
+
+  d_est <- data.frame(K_min=sort(unique_degree)[1:(length(unique_degree)-2)], gamma=rep(0,length(unique_degree)-2), D=rep(0,length(unique_degree)-2))
+  for (i in d_est$K_min){
+    d_est[which(d_est$K_min == i),2] <- estimate_xmin(m_pl, xmins = i)$pars
+    d_est[which(d_est$K_min == i),3] <- estimate_xmin(m_pl, xmins = i)$gof
+  }
+  K.min_D.min <- d_est[which.min(d_est$D), 1]
+
   #generate kmin & kmax pairs
   pairs <- as.data.frame(t(combn(sort(unique_degree), 2)))
   pairs$D <- rep(0, length(pairs$V1))
@@ -184,6 +194,7 @@ plot_degrees_distribution <- function(degree) {
     pairs[i,4]<- estimate_xmin(m_pl, xmin = pairs[i,1], xmax = pairs[i,2], distance = "ks")$pars
   }
 
+  #bs_pl_sat_cut <- bootstrap_p(m_pl, xmins = pairs[which.min(pairs$D), 1], xmax = pairs[which.min(pairs$D), 2], no_of_sims = 1000, threads = 8)
   k_sat <- pairs[which.min(pairs$D), 1]
   k_cut <- pairs[which.min(pairs$D), 2]
 
@@ -232,7 +243,7 @@ Usaremos el contraste de hipótesis de *Kolmogorov-Smirnov* para definir si el s
 Diremos que $H_0 =$ libre de escala y $H_A = $ no libre de escala. Trataremos el coeficiente resultado como un p-valor
 siendo $p-valor > 0.05$ no rechazaremos la hipótesis nula $H_0$, por lo que será libre de escala.
 
-```{r}
+```{r 2_b1}
 network.degree.distribution <- degree.distribution(graph_data$graph)
 fit.scale.free <- power.law.fit(network.degree.distribution)
 fit.scale.free[["KS.p"]]
@@ -241,7 +252,7 @@ fit.scale.free[["KS.p"]]
 
 ### con degree > 5
 
-```{r}
+```{r 2_b2}
 degree[degree>5] %>% plot_degrees_distribution()
 
 V(graph_data$graph)$degree <- degree
@@ -254,7 +265,7 @@ fit.scale.free[["KS.p"]]
 
 ### con degree > 10
 
-```{r}
+```{r 2_b3}
 degree[degree>10] %>% plot_degrees_distribution()
 
 graf2 <- subgraph(graph_data$graph,V(graph_data$graph)$degree > 10)
@@ -266,7 +277,7 @@ fit.scale.free[["KS.p"]]
 
 ### con degree > 100
 
-```{r}
+```{r 2_b4}
 #degree[degree>100] %>% plot_degrees_distribution()
 ```
 No hay nodos con grado superior a grado 100. No se puede ejecutar el algoritmo.
@@ -283,7 +294,7 @@ Vemos que a mayor grado las regresiones se "estiran".
 1. Montar una regresión lineal con el plano
 1. Plot de la línea de regresión sobre XY
 
-```{r}
+```{r 2_c}
 degrees <- degree(graph_data$graph)
 degrees_less_first10 <- which(degrees>0)[-(1:10)]  # remove the first 10 prob values
 log_degrees_less_first10_y <- log(degrees[degrees_less_first10]) # degree
@@ -298,7 +309,7 @@ points(exp(log_degrees_less_first10_x), exp(LMI[1]+LMI[2]*log_degrees_less_first
 
 Podemos comprobar que la correspondiente nube de puntos aparentemente se ajusta a una exponencial negativa.
 
-```{r}
+```{r 2_d}
 data.dist <- data.frame(k=0:max(degree), p_k=degree_distribution(graph_data$graph))
 data.dist <- data.dist[data.dist$p_k>0,]
 ggplot(data.dist) + geom_point(aes(x=k, y=p_k)) + theme_bw()
@@ -307,21 +318,21 @@ ggplot(data.dist) + geom_point(aes(x=k, y=p_k)) + theme_bw()
 ## 3) Use the routine sample_pa( ) to generate a rich-get-richer (preferential attachment) graph with similar degree distribution of  the *directed* facebook graph of the file **facebook_sample_anon.txt**. Use the code similar to: sample_pa(n.GRAPH, out.seq=degree(GRAPH,mode="out")) Plot the degree distribution of the generated graph (log-log). What is the exponent of the power law of the generated graph for the in-degrees?
 
 Generate rich-get-richer
-```{r}
+```{r 3_1}
 links <- read.table("facebook_sample_anon.txt", header=FALSE, as.is=T)
 facenet <- graph_from_data_frame(d=links, directed=FALSE)
 graph <- sample_pa(n = length(V(facenet)), out.seq=degree(facenet, mode="out"))
 ```
 
 
-```{r}
+```{r 3_2}
 degrees <- degree(graph)
-degrees[degrees>10] %>% plot_degrees_distribution()
+degrees[degrees>1000] %>% plot_degrees_distribution()
 ```
 
 
 log-log
-```{r}
+```{r 3_3}
 degrees_less_first10 <- which(degrees>0)[-(1:10)]  # remove the first 10 prob values
 log_degrees_less_first10_y <- log(degrees[degrees_less_first10]) # log degree
 log_degrees_less_first10_x <- log(degrees_less_first10) # log node id
@@ -333,8 +344,8 @@ points(degrees_less_first10, exp(LMI[1]+LMI[2]*log_degrees_less_first10_x), col=
 
 Podemos comprobar que la correspondiente nube de puntos aparentemente se ajusta a una exponencial negativa.
 
-```{r}
-data.dist <- data.frame(k=0:max(degree), p_k=degree_distribution(graph))
+```{r 3_4}
+data.dist <- data.frame(k=0:max(degrees), p_k=degree_distribution(graph))
 data.dist <- data.dist[data.dist$p_k>0,]
 ggplot(data.dist) + geom_point(aes(x=k, y=p_k)) + theme_bw()
 ```

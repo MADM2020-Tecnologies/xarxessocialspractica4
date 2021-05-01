@@ -2,8 +2,7 @@
 title: "Handout 4"
 author: "Guillermo Gavilla Hernández, Miquel Toni Llambías Cabot"
 output:
-html_document:
-toc: true
+html_document
 theme: united
 ---
 
